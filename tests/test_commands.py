@@ -209,3 +209,53 @@ def test_powershell_lookup_ignores_planted_pwsh(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
     planted = os.path.normcase(str(tmp_path / "cwd" / "pwsh.exe"))
     assert os.path.normcase(os.path.abspath(shell.powershell_executable())) != planted
+
+
+def test_missing_system_powershell_never_falls_back_to_a_bare_name(tmp_path, monkeypatch):
+    """No %SystemRoot% copy: resolve on PATH (absolute dirs only) or refuse - never a bare "powershell.exe",
+    which CreateProcess would look up in the current folder first."""
+    from launchdeck.commands import model
+    from launchdeck.launcher import packaged_apps
+    from launchdeck.winsys import shell
+    _plant(tmp_path / "cwd", "powershell.exe")
+    monkeypatch.chdir(tmp_path / "cwd")
+    monkeypatch.delenv("NoDefaultCurrentDirectoryInExePath", raising=False)
+    monkeypatch.setenv("SystemRoot", str(tmp_path / "nowindows"))
+    monkeypatch.setenv("PATH", os.pathsep.join([".", str(tmp_path / "empty")]))
+    monkeypatch.setattr(shell, "which_on_path", lambda name: None)  # no pwsh either
+    assert model.windows_powershell() is None
+    with pytest.raises(shell.LaunchError):
+        shell.powershell_executable()
+    started = []
+    monkeypatch.setattr(shell.subprocess, "Popen", lambda *a, **k: started.append(a))
+    with pytest.raises(shell.LaunchError):
+        shell.open_powershell(tmp_path / "cwd")
+    entries, status, message = packaged_apps.list_packaged_apps(popen=lambda *a, **k: started.append(a))
+    assert (entries, status) == ([], "error") and "PowerShell" in message
+    assert started == []  # nothing was launched
+
+    real = _plant(tmp_path / "bin", "powershell.exe")  # found on PATH: used by absolute path
+    monkeypatch.setenv("PATH", os.pathsep.join([".", str(tmp_path / "bin")]))
+    assert os.path.normcase(model.windows_powershell()) == os.path.normcase(str(real))
+    assert os.path.normcase(shell.powershell_executable()) == os.path.normcase(str(real))
+    calls = []
+    packaged_apps.list_packaged_apps(popen=lambda argv, **k: calls.append(argv) or (_ for _ in ()).throw(OSError()))
+    assert os.path.normcase(calls[0][0]) == os.path.normcase(str(real))
+
+
+def test_relative_system_root_is_not_trusted(tmp_path, monkeypatch):
+    from launchdeck.commands import model
+    from launchdeck.launcher import packaged_apps
+    monkeypatch.setenv("SystemRoot", "Windows")  # relative: would resolve against the current folder
+    assert model.system_root() == r"C:\Windows"
+    calls = []
+    packaged_apps.launch_packaged(packaged_apps.APPS_FOLDER_PREFIX + "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App",
+                                  popen=lambda argv, **kw: calls.append(argv))
+    assert os.path.isabs(calls[0][0]) and calls[0][0].lower().endswith("explorer.exe")
+
+
+def test_system_powershell_is_absolute():
+    from launchdeck.commands import model
+    found = model.windows_powershell()
+    if found is not None:
+        assert os.path.isabs(found) and os.path.isfile(found)

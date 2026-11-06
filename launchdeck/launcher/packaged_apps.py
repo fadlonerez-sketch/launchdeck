@@ -12,8 +12,8 @@ import logging
 import os
 import re
 import subprocess
-from pathlib import Path
 
+from launchdeck.commands.model import system_root, windows_powershell
 from launchdeck.launcher.models import KIND_APP
 from launchdeck.storage.index_store import IndexedEntry
 
@@ -59,17 +59,16 @@ def parse_start_apps(text: str) -> list[IndexedEntry]:
     return entries
 
 
-def _windows_powershell() -> str:
-    root = os.environ.get("SystemRoot", r"C:\Windows")
-    path = Path(root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-    return str(path) if path.exists() else "powershell.exe"
 
 
 def list_packaged_apps(timeout: float = 30.0, cancelled=lambda: False,
                        popen=subprocess.Popen) -> tuple[list[IndexedEntry], str, str]:
     """Return (entries, status, message). Failures are reported, never raised. Cancellable."""
+    powershell = windows_powershell()
+    if powershell is None:  # never a bare name: CreateProcess would search the current folder first
+        return [], "error", "Windows PowerShell was not found, so the installed apps cannot be listed."
     try:
-        proc = popen([_windows_powershell(), "-NoProfile", "-NonInteractive", "-Command", _SCRIPT],
+        proc = popen([powershell, "-NoProfile", "-NonInteractive", "-Command", _SCRIPT],
                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
                      shell=False, creationflags=CREATE_NO_WINDOW)
     except OSError as exc:
@@ -100,5 +99,5 @@ def launch_packaged(target: str, popen=subprocess.Popen) -> None:
     app_id = target[len(APPS_FOLDER_PREFIX):] if is_packaged_target(target) else ""
     if not is_valid_aumid(app_id):
         raise ValueError("Not a valid packaged app id.")
-    explorer = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "explorer.exe")
+    explorer = os.path.join(system_root(), "explorer.exe")
     popen([explorer, APPS_FOLDER_PREFIX + app_id], shell=False)

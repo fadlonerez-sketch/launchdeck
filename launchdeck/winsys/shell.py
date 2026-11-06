@@ -7,9 +7,8 @@ import logging
 import os
 import subprocess
 from ctypes import wintypes
-from pathlib import Path
 
-from launchdeck.commands.model import which_on_path
+from launchdeck.commands.model import system_root, which_on_path, windows_powershell
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +69,7 @@ def reveal_in_explorer(path: str | os.PathLike) -> None:
         log.warning("SHOpenFolderAndSelectItems failed (%s); falling back to explorer.exe", exc)
     # Fallback: explorer's /select syntax needs the quotes exactly like this. Windows paths cannot
     # contain '"', and the path was checked to exist, so the string cannot carry extra arguments.
-    explorer = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "explorer.exe")
+    explorer = os.path.join(system_root(), "explorer.exe")
     try:
         subprocess.Popen(f'"{explorer}" /select,"{path}"', shell=False)
     except OSError as exc:
@@ -78,13 +77,14 @@ def reveal_in_explorer(path: str | os.PathLike) -> None:
 
 
 def powershell_executable() -> str:
-    """Prefer PowerShell 7 when installed, otherwise Windows PowerShell."""
+    """Prefer PowerShell 7 when installed, otherwise Windows PowerShell. Always an absolute path."""
     pwsh = which_on_path("pwsh.exe")  # never a pwsh.exe planted in the current folder
     if pwsh:
         return pwsh
-    system_root = os.environ.get("SystemRoot", r"C:\Windows")
-    candidate = Path(system_root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-    return str(candidate) if candidate.exists() else "powershell.exe"
+    powershell = windows_powershell()
+    if powershell is None:
+        raise LaunchError("PowerShell was not found in the Windows folder or on PATH.")
+    return powershell
 
 
 def open_powershell(folder: str | os.PathLike) -> None:
@@ -95,8 +95,9 @@ def open_powershell(folder: str | os.PathLike) -> None:
     folder = str(folder)
     if not os.path.isdir(folder):
         raise LaunchError(f"'{folder}' is not an existing folder.")
+    executable = powershell_executable()
     try:
-        subprocess.Popen([powershell_executable(), "-NoLogo", "-NoExit"], cwd=folder,
+        subprocess.Popen([executable, "-NoLogo", "-NoExit"], cwd=folder,
                          shell=False, creationflags=CREATE_NEW_CONSOLE)
     except OSError as exc:
         raise LaunchError(f"Could not start PowerShell: {_os_error_text(exc)}") from exc

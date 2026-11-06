@@ -104,6 +104,27 @@ def which_on_path(name: str) -> str | None:
     return None
 
 
+def system_root() -> str:
+    """The absolute Windows folder. A missing, empty or relative %SystemRoot% is never trusted."""
+    root = os.environ.get("SystemRoot", "").strip().strip('"')
+    if root and os.path.isabs(root):
+        return root
+    return r"C:\Windows"
+
+
+def windows_powershell(which: Callable[[str], str | None] = which_on_path) -> str | None:
+    """Absolute path of Windows PowerShell, or None.
+
+    Never a bare "powershell.exe": CreateProcess would then search the current folder
+    (and the application folder) before PATH, so a planted copy could run instead.
+    """
+    candidate = os.path.join(system_root(), "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+    if os.path.isfile(candidate):
+        return candidate
+    found = which("powershell.exe")
+    return os.path.abspath(found) if found and os.path.isabs(found) else None
+
+
 def resolve_executable(executable: str, which: Callable[[str], str | None] = which_on_path) -> str | None:
     """Absolute path of the executable, or None. Bare names are looked up on PATH."""
     executable = executable.strip().strip('"')
