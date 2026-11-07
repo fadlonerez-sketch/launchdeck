@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: python -m ruff check .
+
+      # The two deselected tests register real global hotkeys with Windows; they are manual-only.
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: >-
+          python -m pytest tests -p no:cacheprovider
+          --deselect tests/test_packaged_and_hotkey.py::test_real_hotkey_registration_and_conflict
+          --deselect tests/test_packaged_and_hotkey.py::test_failed_change_keeps_previous_hotkey
