@@ -1,1 +1,3 @@
-PySide6>=6.6
+# Runtime dependency, pinned to the version the test suite was last run against.
+# LaunchDeck is expected to work with PySide6 >= 6.6; bump this pin after re-running the tests.
+PySide6==6.11.2
