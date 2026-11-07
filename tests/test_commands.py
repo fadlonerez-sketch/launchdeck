@@ -158,7 +158,10 @@ def test_bare_name_resolved_on_path(tmp_path):
     exe.parent.mkdir()
     exe.write_bytes(b"MZ")
     cmd = CommandDef("My tool", ["mt"], "mytool.exe")
-    which = lambda name: str(exe) if name == "mytool.exe" else None
+
+    def which(name):
+        return str(exe) if name == "mytool.exe" else None
+
     assert validate_command(cmd, which=which) == []
     assert prepare(cmd, "", FOLDERS, which=which).argv == [os.path.abspath(str(exe))]
 

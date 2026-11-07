@@ -1,0 +1,13 @@
+# Lint configuration (dev only): `python -m ruff check .`
+line-length = 140
+target-version = "py311"
+extend-exclude = ["build", "dist"]
+
+[lint]
+# pycodestyle errors/warnings + pyflakes. Kept deliberately small so CI flags real mistakes, not style churn.
+select = ["E", "F", "W"]
+
+[lint.per-file-ignores]
+# Inline SVG path data and Qt style-sheet rules read better unwrapped.
+"launchdeck/ui/icons.py" = ["E501"]
+"launchdeck/ui/theme.py" = ["E501"]
